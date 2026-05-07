@@ -2,8 +2,8 @@ name: 病历评分 & 部署
 
 on:
   schedule:
-    # 北京时间每天 08:30 (UTC+8 → UTC 00:30)
-    - cron: '30 0 * * *'
+    # 北京时间每天 22:00 (UTC+8 → UTC 14:00)
+    - cron: '00 14 * * *'
   workflow_dispatch: # 支持手动触发
 
 permissions:
@@ -37,11 +37,27 @@ jobs:
           key: medrec-auth-state-v1
 
       - name: 登录 & 抓取病历
+        id: crawl
         env:
           MEDREC_USERNAME: ${{ secrets.MEDREC_USERNAME }}
           MEDREC_PASSWORD: ${{ secrets.MEDREC_PASSWORD }}
           MEDREC_HEADLESS: 'true'
         run: python scripts/crawl_records.py
+        continue-on-error: true
+
+      - name: 检查抓取结果
+        run: |
+          if [ "${{ steps.crawl.outcome }}" != "success" ]; then
+            echo "[deploy] 远程抓取失败（可能需验证码），检查是否有历史数据可继续..."
+            if [ -f .tmp/records.json ] && [ -s .tmp/records.json ]; then
+              echo "[deploy] 存在历史病历数据，继续评分"
+            else
+              echo "[deploy] 无可用病历数据，终止流程"
+              exit 0
+            fi
+          else
+            echo "[deploy] 抓取成功，继续评分"
+          fi
 
       - name: 评分
         run: python scripts/score_records.py
@@ -61,4 +77,4 @@ jobs:
           publish_dir: ./gh-pages-staging
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: '更新报告 ${{ github.event.repository.updated_at }}'
+          commit_message: '更新报告 $(date -u +"%Y-%m-%d %H:%M UTC")'
