@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 敏感配置与临时文件
+src/config.local.py
+.env
+
+# 中间产物
+.tmp/
+*.log
+
+# IDE
+.vscode/
+.idea/

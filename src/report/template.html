@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>口腔门诊病历质量督查报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; background: #f5f6f7; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 8px; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 24px; font-size: 14px; }
+        .cards { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+        .card { background: #fff; border-radius: 8px; padding: 20px; flex: 1; min-width: 180px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .card .label { font-size: 13px; color: #888; margin-bottom: 6px; }
+        .card .value { font-size: 28px; font-weight: 700; color: #222; }
+        .card .value.grade-excellent { color: #52c41a; }
+        .card .value.grade-normal { color: #1890ff; }
+        .card .value.grade-warning { color: #faad14; }
+        .card .value.grade-fail { color: #ff4d4f; }
+        .charts { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+        .chart-box { background: #fff; border-radius: 8px; padding: 16px; flex: 1; min-width: 340px; height: 360px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .section { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .section h2 { margin-top: 0; font-size: 18px; border-left: 4px solid #1890ff; padding-left: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+        th { background: #fafafa; font-weight: 600; color: #555; }
+        tr:hover { background: #fafafa; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .tag-pass { background: #f6ffed; color: #389e0d; }
+        .tag-fail { background: #fff2f0; color: #cf1322; }
+        .tag-manual { background: #fff7e6; color: #d46b08; }
+        .grade-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; }
+        .grade-excellent { background: #f6ffed; color: #389e0d; }
+        .grade-normal { background: #e6f7ff; color: #096dd9; }
+        .grade-warning { background: #fffbe6; color: #d48806; }
+        .grade-fail { background: #fff2f0; color: #cf1322; }
+        .grade-no-record { background: #f5f5f5; color: #999; }
+        .download-btn { position: fixed; top: 20px; right: 20px; z-index: 999; padding: 8px 18px; background: #1890ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; box-shadow: 0 2px 8px rgba(24,144,255,0.3); transition: background .2s; }
+        .download-btn:hover:not(:disabled) { background: #096dd9; }
+        .download-btn:disabled { background: #bfbfbf; cursor: not-allowed; box-shadow: none; }
+        .patient-header { background: #f0f5ff; padding: 12px 16px; margin: 16px 0 8px; border-radius: 6px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .evidence { color: #888; font-size: 12px; margin-top: 4px; }
+        .review-box { background: #fff7e6; border: 1px solid #ffd591; border-radius: 6px; padding: 12px; margin-bottom: 8px; }
+        .collapse-btn { cursor: pointer; color: #1890ff; font-size: 13px; margin-top: 8px; display: inline-block; }
+        .hidden { display: none; }
+        /* 人工复核按钮样式 */
+        .review-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+        .review-btn { padding: 2px 8px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; transition: all .2s; line-height: 1.5; }
+        .review-btn-plus { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
+        .review-btn-plus:hover { background: #389e0d; color: #fff; }
+        .review-btn-plus.active { background: #389e0d; color: #fff; }
+        .review-btn-minus { background: #fff2f0; color: #cf1322; border: 1px solid #ffa39e; }
+        .review-btn-minus:hover { background: #cf1322; color: #fff; }
+        .review-btn-minus.active { background: #cf1322; color: #fff; }
+        .review-btn-reset { background: #f5f5f5; color: #666; border: 1px solid #d9d9d9; font-size: 11px; padding: 2px 6px; }
+        .review-btn-reset:hover { background: #d9d9d9; }
+        .review-status { font-size: 11px; font-weight: 500; }
+        .review-status-plus { color: #389e0d; }
+        .review-status-minus { color: #cf1322; }
+        .score-updated { animation: scoreFlash 0.8s ease; }
+        @keyframes scoreFlash { 0% { background: #fffbe6; } 100% { background: transparent; } }
+        .patient-header .grade-badge { transition: all .3s; }
+    </style>
+</head>
+<body>
+<button id="downloadBtn" class="download-btn">下载 PNG</button>
+<div class="container">
+    <h1>口腔门诊病历质量督查报告</h1>
+    <p class="subtitle">督查标准：口腔门诊病历质量督查表（复诊） | 满分：{{ full_score }} 分</p>
+
+    <!-- 总览卡片 -->
+    <div class="cards">
+        <div class="card">
+            <div class="label">总患者数</div>
+            <div class="value" id="card-total-patients">{{ total_patients }}</div>
+        </div>
+        <div class="card">
+            <div class="label">平均得分{% if no_record_count %} <span style="font-size:11px;color:#999;">（已排除无病历）</span>{% endif %}</div>
+            <div class="value" id="card-avg-score">{{ avg_score }}</div>
+        </div>
+        <div class="card">
+            <div class="label">最高得分{% if no_record_count %} <span style="font-size:11px;color:#999;">（已排除无病历）</span>{% endif %}</div>
+            <div class="value" id="card-max-score">{{ max_score }}</div>
+        </div>
+        <div class="card">
+            <div class="label">最低得分{% if no_record_count %} <span style="font-size:11px;color:#999;">（已排除无病历）</span>{% endif %}</div>
+            <div class="value" id="card-min-score">{{ min_score }}</div>
+        </div>
+        <div class="card">
+            <div class="label">需复核项数</div>
+            <div class="value" id="card-total-manual">{{ total_manual }}</div>
+        </div>
+    </div>
+
+    <!-- 图表 -->
+    <div class="charts">
+        <div class="chart-box" id="categoryChart"></div>
+        <div class="chart-box" id="gradeChart"></div>
+    </div>
+
+    <!-- 等级分布表格 -->
+    <div class="section">
+        <h2>等级分布</h2>
+        <table>
+            <thead>
+                <tr><th>等级</th><th>患者数</th><th>占比</th><th>扣分区间</th></tr>
+            </thead>
+            <tbody id="grade-distribution-body">
+                {% for g in grade_rows %}
+                <tr>
+                    <td><span class="grade-badge grade-{{ g.class }}">{{ g.name }}</span></td>
+                    <td>{{ g.count }}</td>
+                    <td>{{ g.percent }}%</td>
+                    <td>{{ g.deduct_range }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 需人工复核项 -->
+    {% if manual_items %}
+    <div class="section">
+        <h2>需人工复核项（共 {{ manual_items|length }} 条）</h2>
+        {% for m in manual_items %}
+        <div class="review-box">
+            <strong>{{ m.patient_name }}</strong> — {{ m.category_name }}（{{ m.description }}）<br>
+            <span class="evidence">{{ m.evidence }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- 详细评分 -->
+    <div class="section">
+        <h2>详细评分</h2>
+        {% for p in scored_patients %}
+        <div class="patient-header" data-patient-idx="{{ loop.index0 }}">
+            <span>{{ p.patient_name }} {% if p.patient_id %}（{{ p.patient_id }}）{% endif %}</span>
+            <span>
+                <span class="grade-badge grade-{{ p.grade_class }}" id="grade-badge-{{ loop.index0 }}">{{ p.grade }}</span>
+                <span style="margin-left:8px;color:#666;font-size:13px;" id="patient-score-{{ loop.index0 }}">{{ p.total_score }}/{{ p.full_score }} 分（扣 {{ p.total_deduct }} 分）</span>
+            </span>
+        </div>
+        {% if p.used_llm and p.llm_summary %}
+        <div style="background:#f6ffed;border-left:3px solid #52c41a;padding:8px 12px;margin:0 0 8px 0;font-size:12px;color:#389e0d;">
+            <strong>大模型评语：</strong>{{ p.llm_summary }}
+        </div>
+        {% endif %}
+        <table>
+            <thead>
+                <tr><th style="width:50px">编号</th><th style="width:100px">大项</th><th>检查内容</th><th style="width:60px">分值</th><th style="width:60px">得分</th><th style="width:80px">状态</th><th>扣分原因/证据</th><th style="width:130px">人工复核</th></tr>
+            </thead>
+            <tbody>
+                {% set pi = loop.index0 %}
+                {% for d in p.details %}
+                <tr data-patient-idx="{{ pi }}" data-detail-idx="{{ loop.index0 }}">
+                    <td>{{ d.rule_id }}</td>
+                    <td>{{ d.category_name }}</td>
+                    <td>{{ d.description }}</td>
+                    <td class="detail-full-score">{{ d.full_score }}</td>
+                    <td class="detail-score">{{ d.score }}</td>
+                    <td class="detail-status">
+                        {% if d.auto_level == 'manual' %}
+                        <span class="tag tag-manual">需复核</span>
+                        {% elif d.passed %}
+                        <span class="tag tag-pass">通过</span>
+                        {% else %}
+                        <span class="tag tag-fail">未通过</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:12px;color:#666;">{{ d.evidence }}</td>
+                    <td class="detail-review">
+                        <div class="review-actions">
+                            <button class="review-btn review-btn-plus" data-action="plus">+分</button>
+                            <button class="review-btn review-btn-minus" data-action="minus">-分</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endfor %}
+    </div>
+
+    {% if skipped_patients %}
+    <div class="section">
+        <h2>无病历患者（共 {{ skipped_patients | length }} 位）</h2>
+        <table>
+            <thead>
+                <tr><th style="width:40px">#</th><th>患者姓名</th><th style="width:120px">患者 ID</th><th>跳过原因</th></tr>
+            </thead>
+            <tbody>
+                {% for p in skipped_patients %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ p.patient_name }}</td>
+                    <td>{{ p.patient_id or '-' }}</td>
+                    <td style="font-size:12px;color:#666;">{{ p.skip_reason or '该患者今日无病历记录' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <p style="text-align:center;color:#999;font-size:12px;margin-top:24px;">本报告由自动化程序生成，仅供参考。标记「需复核」的项目请务必人工核对。</p>
+</div>
+
+<script>
+    // ===== 数据层：注入患者评分数据供 JS 操作 =====
+    window.__REPORT_DATA = {
+        patients: {{ scored_patients | tojson | safe }},
+        fullScore: {{ full_score | tojson | safe }},
+        noRecordCount: {{ no_record_count | tojson | safe }},
+        categoryNames: {{ category_names | tojson | safe }},
+        totalPatients: {{ total_patients | tojson | safe }}
+    };
+    // 深拷贝原始数据，用于取消复核时恢复
+    window.__ORIGINAL_PATIENTS = JSON.parse(JSON.stringify(window.__REPORT_DATA.patients));
+
+    // 为每个 detail 添加原始值和复核状态字段
+    window.__REPORT_DATA.patients.forEach(function(p, pi) {
+        var origP = window.__ORIGINAL_PATIENTS[pi];
+        p.details.forEach(function(d, di) {
+            var origD = origP.details[di];
+            d._original_score = origD.score;
+            d._original_deduct = origD.deduct;
+            d._original_passed = origD.passed;
+            d._manual_override = null; // null | 'plus' | 'minus'
+        });
+    });
+
+    // ===== 等级计算（复用 Python 逻辑） =====
+    function calcGrade(totalDeduct) {
+        if (totalDeduct <= 5) return { grade: '优秀', cls: 'excellent' };
+        if (totalDeduct <= 10) return { grade: '一般', cls: 'normal' };
+        if (totalDeduct <= 20) return { grade: '需注意', cls: 'warning' };
+        return { grade: '不合格', cls: 'fail' };
+    }
+
+    // ===== 重新计算单个患者 =====
+    function recalcPatient(patient) {
+        var totalScore = 0, totalDeduct = 0;
+        patient.details.forEach(function(d) {
+            totalScore += d.score;
+            totalDeduct += d.deduct;
+        });
+        patient.total_score = totalScore;
+        patient.total_deduct = totalDeduct;
+        var g = calcGrade(totalDeduct);
+        patient.grade = g.grade;
+        patient.grade_class = g.cls;
+    }
+
+    // ===== 更新单条评分行的 DOM =====
+    function updateDetailRow(patientIdx, detailIdx) {
+        var patient = window.__REPORT_DATA.patients[patientIdx];
+        var detail = patient.details[detailIdx];
+        var row = document.querySelector('tr[data-patient-idx="' + patientIdx + '"][data-detail-idx="' + detailIdx + '"]');
+        if (!row) return;
+
+        // 更新得分
+        var scoreCell = row.querySelector('.detail-score');
+        if (scoreCell) scoreCell.textContent = detail.score;
+
+        // 更新状态标签
+        var statusCell = row.querySelector('.detail-status');
+        if (statusCell) {
+            var tagHtml = '';
+            if (detail._manual_override === 'plus') {
+                tagHtml = '<span class="tag tag-pass">通过（人工）</span>';
+            } else if (detail._manual_override === 'minus') {
+                tagHtml = '<span class="tag tag-fail">未通过（人工）</span>';
+            } else if (detail.auto_level === 'manual') {
+                tagHtml = '<span class="tag tag-manual">需复核</span>';
+            } else if (detail.passed) {
+                tagHtml = '<span class="tag tag-pass">通过</span>';
+            } else {
+                tagHtml = '<span class="tag tag-fail">未通过</span>';
+            }
+            statusCell.innerHTML = tagHtml;
+        }
+
+        // 更新复核按钮区域
+        var reviewCell = row.querySelector('.detail-review');
+        if (reviewCell) {
+            var actionsHtml = '<div class="review-actions">';
+            if (detail._manual_override === 'plus') {
+                actionsHtml += '<span class="review-status review-status-plus">已加分</span>';
+                actionsHtml += '<button class="review-btn review-btn-reset" data-action="reset">取消</button>';
+            } else if (detail._manual_override === 'minus') {
+                actionsHtml += '<span class="review-status review-status-minus">已减分</span>';
+                actionsHtml += '<button class="review-btn review-btn-reset" data-action="reset">取消</button>';
+            } else {
+                actionsHtml += '<button class="review-btn review-btn-plus" data-action="plus">+分</button>';
+                actionsHtml += '<button class="review-btn review-btn-minus" data-action="minus">-分</button>';
+            }
+            actionsHtml += '</div>';
+            reviewCell.innerHTML = actionsHtml;
+        }
+    }
+
+    // ===== 更新患者 header DOM =====
+    function updatePatientHeader(patientIdx) {
+        var patient = window.__REPORT_DATA.patients[patientIdx];
+        var badge = document.getElementById('grade-badge-' + patientIdx);
+        var scoreText = document.getElementById('patient-score-' + patientIdx);
+        var header = document.querySelector('.patient-header[data-patient-idx="' + patientIdx + '"]');
+
+        if (badge) {
+            badge.className = 'grade-badge grade-' + patient.grade_class;
+            badge.textContent = patient.grade;
+        }
+        if (scoreText) {
+            scoreText.textContent = patient.total_score + '/' + patient.full_score + ' 分（扣 ' + patient.total_deduct + ' 分）';
+        }
+        if (header) {
+            header.classList.remove('score-updated');
+            void header.offsetWidth; // 触发重排
+            header.classList.add('score-updated');
+        }
+    }
+
+    // ===== 计算全局统计 =====
+    function computeGlobalStats() {
+        var patients = window.__REPORT_DATA.patients;
+        var validPatients = patients.filter(function(p) { return p.grade !== '无病历'; });
+        var noRecordCount = patients.length - validPatients.length;
+
+        var totalScore = 0, maxScore = 0, minScore = 0, avgScore = 0;
+        if (validPatients.length > 0) {
+            var scores = validPatients.map(function(p) { return p.total_score; });
+            totalScore = scores.reduce(function(a, b) { return a + b; }, 0);
+            avgScore = Math.round(totalScore / scores.length * 10) / 10;
+            maxScore = Math.max.apply(null, scores);
+            minScore = Math.min.apply(null, scores);
+        }
+
+        // 等级分布
+        var gradeCounts = { '优秀': 0, '一般': 0, '需注意': 0, '不合格': 0, '无病历': 0 };
+        patients.forEach(function(p) {
+            gradeCounts[p.grade] = (gradeCounts[p.grade] || 0) + 1;
+        });
+
+        var gradeConfig = [
+            { name: '优秀', cls: 'excellent', range: '0–5 分' },
+            { name: '一般', cls: 'normal', range: '6–10 分' },
+            { name: '需注意', cls: 'warning', range: '11–20 分' },
+            { name: '不合格', cls: 'fail', range: '21 分以上' },
+            { name: '无病历', cls: 'no-record', range: '—' }
+        ];
+        var gradeRows = gradeConfig.map(function(cfg) {
+            var count = gradeCounts[cfg.name] || 0;
+            var percent = patients.length > 0 ? Math.round(count / patients.length * 100 * 10) / 10 : 0;
+            return { name: cfg.name, class: cfg.cls, count: count, percent: percent, deduct_range: cfg.range };
+        });
+
+        // 饼图数据
+        var pieColors = { '优秀': '#52c41a', '一般': '#1890ff', '需注意': '#faad14', '不合格': '#ff4d4f', '无病历': '#999999' };
+        var gradePieData = gradeRows
+            .filter(function(r) { return r.count > 0; })
+            .map(function(r) { return { value: r.count, name: r.name, itemStyle: { color: pieColors[r.name] || '#999' } }; });
+
+        // 各维度平均分
+        var categoryStats = {};
+        patients.forEach(function(p) {
+            var patientCat = {};
+            p.details.forEach(function(d) {
+                var cid = d.category_id;
+                if (!patientCat[cid]) patientCat[cid] = { name: d.category_name, score: 0, full: 0 };
+                patientCat[cid].score += d.score;
+                patientCat[cid].full += d.full_score;
+            });
+            Object.keys(patientCat).forEach(function(cid) {
+                if (!categoryStats[cid]) categoryStats[cid] = { name: patientCat[cid].name, scores: [] };
+                categoryStats[cid].scores.push(patientCat[cid].score);
+            });
+        });
+
+        var sortedCids = Object.keys(categoryStats).sort(function(a, b) {
+            var na = parseInt(a, 10), nb = parseInt(b, 10);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return a.localeCompare(b);
+        });
+
+        var categoryAvgScores = sortedCids.map(function(cid) {
+            var scores = categoryStats[cid].scores;
+            return Math.round(scores.reduce(function(a, b) { return a + b; }, 0) / scores.length * 10) / 10;
+        });
+
+        return {
+            avgScore: avgScore,
+            maxScore: maxScore,
+            minScore: minScore,
+            gradeRows: gradeRows,
+            gradePieData: gradePieData,
+            categoryAvgScores: categoryAvgScores,
+            noRecordCount: noRecordCount
+        };
+    }
+
+    // ===== 更新全局 DOM =====
+    function updateGlobalDOM(stats) {
+        document.getElementById('card-avg-score').textContent = stats.avgScore;
+        document.getElementById('card-max-score').textContent = stats.maxScore;
+        document.getElementById('card-min-score').textContent = stats.minScore;
+
+        var tbody = document.getElementById('grade-distribution-body');
+        if (tbody) {
+            tbody.innerHTML = stats.gradeRows.map(function(g) {
+                return '<tr>' +
+                    '<td><span class="grade-badge grade-' + g.class + '">' + g.name + '</span></td>' +
+                    '<td>' + g.count + '</td>' +
+                    '<td>' + g.percent + '%</td>' +
+                    '<td>' + g.deduct_range + '</td>' +
+                '</tr>';
+            }).join('');
+        }
+    }
+
+    // ===== 更新图表 =====
+    function updateCharts(stats) {
+        catChart.setOption({
+            series: [{ data: stats.categoryAvgScores }]
+        });
+        gradeChart.setOption({
+            series: [{ data: stats.gradePieData }]
+        });
+    }
+
+    // ===== 执行人工复核 =====
+    function applyManualReview(patientIdx, detailIdx, action) {
+        var patient = window.__REPORT_DATA.patients[patientIdx];
+        var detail = patient.details[detailIdx];
+
+        if (action === 'plus') {
+            detail._manual_override = 'plus';
+            detail.score = detail.full_score;
+            detail.deduct = 0;
+            detail.passed = true;
+        } else if (action === 'minus') {
+            detail._manual_override = 'minus';
+            detail.score = 0;
+            detail.deduct = detail.full_score;
+            detail.passed = false;
+        } else if (action === 'reset') {
+            detail._manual_override = null;
+            detail.score = detail._original_score;
+            detail.deduct = detail._original_deduct;
+            detail.passed = detail._original_passed;
+        }
+
+        // 重新计算该患者
+        recalcPatient(patient);
+
+        // 更新该患者相关的 DOM
+        updateDetailRow(patientIdx, detailIdx);
+        updatePatientHeader(patientIdx);
+
+        // 更新全局统计
+        var stats = computeGlobalStats();
+        updateGlobalDOM(stats);
+        updateCharts(stats);
+    }
+
+    // ===== 事件委托处理复核按钮点击 =====
+    function handleReviewClick(e) {
+        var btn = e.target.closest('.review-btn');
+        if (!btn) return;
+        e.stopPropagation();
+        var row = btn.closest('tr');
+        if (!row) return;
+        var patientIdx = parseInt(row.getAttribute('data-patient-idx'), 10);
+        var detailIdx = parseInt(row.getAttribute('data-detail-idx'), 10);
+        var action = btn.getAttribute('data-action');
+        applyManualReview(patientIdx, detailIdx, action);
+    }
+
+    // ===== 绑定复核按钮事件（事件委托，避免重复绑定） =====
+    function bindReviewButtons() {
+        var tables = document.querySelectorAll('.section table tbody');
+        tables.forEach(function(tbody) {
+            tbody.removeEventListener('click', handleReviewClick);
+            tbody.addEventListener('click', handleReviewClick);
+        });
+    }
+
+    // ===== 页面加载时初始化 =====
+    function initManualReview() {
+        bindReviewButtons();
+    }
+
+    // 各维度平均得分柱状图
+    var catChart = echarts.init(document.getElementById('categoryChart'));
+    catChart.setOption({
+        title: { text: '各维度平均得分', left: 'center', textStyle: { fontSize: 15 } },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'category', data: {{ category_names | tojson }}, axisLabel: { rotate: 15 } },
+        yAxis: { type: 'value' },
+        series: [{
+            name: '平均得分',
+            type: 'bar',
+            data: {{ category_avg_scores | tojson }},
+            itemStyle: { color: '#5470c6' },
+            label: { show: true, position: 'top' }
+        }]
+    });
+
+    // 等级分布饼图
+    var gradeChart = echarts.init(document.getElementById('gradeChart'));
+    gradeChart.setOption({
+        title: { text: '等级分布', left: 'center', textStyle: { fontSize: 15 } },
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        legend: { bottom: '5%', left: 'center' },
+        series: [{
+            name: '等级',
+            type: 'pie',
+            radius: ['40%', '70%'],
+            avoidLabelOverlap: false,
+            itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+            label: { show: true, formatter: '{b}\n{c}人' },
+            data: {{ grade_pie_data | tojson }}
+        }]
+    });
+
+    window.addEventListener('resize', function() {
+        catChart.resize();
+        gradeChart.resize();
+    });
+
+    // 下载报告为 PNG
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+        var btn = this;
+        var originalText = btn.textContent;
+        btn.textContent = '生成中...';
+        btn.disabled = true;
+
+        // 临时隐藏下载按钮和人工复核控件，避免出现在截图中
+        btn.style.visibility = 'hidden';
+        var reviewBtns = document.querySelectorAll('.review-actions');
+        reviewBtns.forEach(function(el) { el.style.visibility = 'hidden'; });
+
+        html2canvas(document.querySelector('.container'), {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#f5f6f7',
+            windowWidth: document.documentElement.scrollWidth,
+            windowHeight: document.documentElement.scrollHeight,
+        }).then(function(canvas) {
+            var link = document.createElement('a');
+            var today = new Date().toISOString().slice(0, 10);
+            link.download = '病历质量督查报告_' + today + '.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }).catch(function(err) {
+            alert('下载失败：' + err.message);
+        }).finally(function() {
+            btn.style.visibility = 'visible';
+            reviewBtns.forEach(function(el) { el.style.visibility = 'visible'; });
+            btn.textContent = originalText;
+            btn.disabled = false;
+        });
+    });
+
+    // 初始化人工复核功能
+    initManualReview();
+</script>
+</body>
+</html>
