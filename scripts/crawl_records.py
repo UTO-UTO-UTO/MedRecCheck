@@ -6,6 +6,7 @@
 # Known Issues：
 #   - 若目标网站页面结构大幅调整，选择器可能失效，需同步更新 src/crawler/ 下的页面定位逻辑
 #   - 首次运行若未保存登录态，会自动调用登录流程并弹出浏览器窗口
+#   - 设置环境变量 MEDREC_HEADLESS=true 可启用无头模式（用于 CI/CD 环境）
 
 import asyncio
 import json
@@ -23,22 +24,25 @@ from src.crawler.login import perform_login, verify_and_refresh_auth
 from src.crawler.dashboard import navigate_to_dashboard, apply_filters, set_page_size, get_patient_list
 from src.crawler.record import crawl_all_records
 
+# CI/CD 环境（GitHub Actions 等）需通过环境变量启用无头模式
+_headless = os.environ.get("MEDREC_HEADLESS", "").lower() in ("true", "1", "yes")
+
 
 async def main() -> int:
     # 确保 .tmp 目录存在
     os.makedirs(os.path.dirname(RECORDS_FILE) or ".tmp", exist_ok=True)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=_headless)
 
         # 检查登录态
         if not os.path.exists(STORAGE_STATE):
             print("[crawl] 未找到登录态，先执行登录...")
             await browser.close()
-            await perform_login(headless=False)
-            browser = await p.chromium.launch(headless=False)
+            await perform_login(headless=_headless)
+            browser = await p.chromium.launch(headless=_headless)
 
-        browser, context = await verify_and_refresh_auth(p, browser, headless=False)
+        browser, context = await verify_and_refresh_auth(p, browser, headless=_headless)
         page = await context.new_page()
 
         try:
