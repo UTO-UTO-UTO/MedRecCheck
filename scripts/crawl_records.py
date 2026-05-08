@@ -7,6 +7,7 @@
 #   - 若目标网站页面结构大幅调整，选择器可能失效，需同步更新 src/crawler/ 下的页面定位逻辑
 #   - 首次运行若未保存登录态，会自动调用登录流程并弹出浏览器窗口
 #   - 设置环境变量 MEDREC_HEADLESS=true 可启用无头模式（用于 CI/CD 环境）
+#   - 设置环境变量 MEDREC_TIMEOUT 可调整页面导航超时毫秒数（默认 60000）
 
 import asyncio
 import json
@@ -26,6 +27,7 @@ from src.crawler.record import crawl_all_records
 
 # CI/CD 环境（GitHub Actions 等）需通过环境变量启用无头模式
 _headless = os.environ.get("MEDREC_HEADLESS", "").lower() in ("true", "1", "yes")
+_timeout = int(os.environ.get("MEDREC_TIMEOUT", "60000"))
 
 
 async def main() -> int:
@@ -39,10 +41,10 @@ async def main() -> int:
         if not os.path.exists(STORAGE_STATE):
             print("[crawl] 未找到登录态，先执行登录...")
             await browser.close()
-            await perform_login(headless=_headless)
+            await perform_login(headless=_headless, timeout_ms=_timeout)
             browser = await p.chromium.launch(headless=_headless)
 
-        browser, context = await verify_and_refresh_auth(p, browser, headless=_headless)
+        browser, context = await verify_and_refresh_auth(p, browser, headless=_headless, timeout_ms=_timeout)
         page = await context.new_page()
 
         try:

@@ -42,7 +42,23 @@ jobs:
           MEDREC_USERNAME: ${{ secrets.MEDREC_USERNAME }}
           MEDREC_PASSWORD: ${{ secrets.MEDREC_PASSWORD }}
           MEDREC_HEADLESS: 'true'
-        run: python scripts/crawl_records.py
+          MEDREC_TIMEOUT: '90000'
+        run: |
+          for i in 1 2; do
+            echo "[deploy] 第 $i 次尝试抓取..."
+            if python scripts/crawl_records.py; then
+              echo "[deploy] 抓取成功"
+              echo "crawl_ok=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ $i -lt 2 ]; then
+              echo "[deploy] 失败，30 秒后重试..."
+              sleep 30
+            fi
+          done
+          echo "[deploy] 两次尝试均失败"
+          echo "crawl_ok=false" >> "$GITHUB_OUTPUT"
+          exit 1
         continue-on-error: true
 
       - name: 检查抓取结果

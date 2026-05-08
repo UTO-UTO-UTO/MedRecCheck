@@ -6,12 +6,13 @@ from playwright.async_api import async_playwright
 from src.config import LOGIN_URL, USERNAME, PASSWORD, STORAGE_STATE, require_login_config
 
 
-async def perform_login(headless: bool = False) -> None:
+async def perform_login(headless: bool = False, timeout_ms: int = 60000) -> None:
     """
     打开浏览器，访问登录页，填写账号密码并登录，保存 storage state 到文件。
 
     Args:
         headless: 是否无头模式。首次运行建议 False 以便观察登录过程。
+        timeout_ms: 页面导航超时（毫秒），默认 60000。
     """
     require_login_config()
 
@@ -20,8 +21,8 @@ async def perform_login(headless: bool = False) -> None:
         context = await browser.new_context()
         page = await context.new_page()
 
-        print(f"[login] 正在访问登录页: {LOGIN_URL}")
-        await page.goto(LOGIN_URL, wait_until="domcontentloaded")
+        print(f"[login] 正在访问登录页: {LOGIN_URL} (超时: {timeout_ms}ms)")
+        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=timeout_ms)
 
         # 等待 Angular SPA 渲染出登录表单（避免 JS 异步加载导致选择器找不到元素）
         username_loc = page.locator("input[placeholder*='用户名'], input[placeholder*='账号'], #username, input[name='username']").first
@@ -98,7 +99,7 @@ async def new_context_with_auth(browser):
     return await browser.new_context(storage_state=STORAGE_STATE)
 
 
-async def verify_and_refresh_auth(p, browser, headless: bool = False):
+async def verify_and_refresh_auth(p, browser, headless: bool = False, timeout_ms: int = 60000):
     """
     验证已保存的登录态是否仍然有效。若被重定向到登录页则删除旧状态并重新登录。
 
@@ -106,6 +107,7 @@ async def verify_and_refresh_auth(p, browser, headless: bool = False):
         p: Playwright 实例
         browser: 当前 Browser 实例
         headless: 重新登录时是否使用无头模式
+        timeout_ms: 页面导航超时（毫秒），默认 60000
 
     Returns:
         (browser, context) 元组，browser 可能是重新启动后的新实例
@@ -116,8 +118,8 @@ async def verify_and_refresh_auth(p, browser, headless: bool = False):
     temp_context = await browser.new_context(storage_state=STORAGE_STATE)
     temp_page = await temp_context.new_page()
 
-    print("[auth] 验证登录态有效性...")
-    await temp_page.goto(BASE_URL, wait_until="domcontentloaded")
+    print(f"[auth] 验证登录态有效性... (超时: {timeout_ms}ms)")
+    await temp_page.goto(BASE_URL, wait_until="domcontentloaded", timeout=timeout_ms)
     await temp_page.wait_for_timeout(2500)
 
     pwd_loc = temp_page.locator("input[type='password'], #password, input[name='password']")
@@ -132,7 +134,7 @@ async def verify_and_refresh_auth(p, browser, headless: bool = False):
         if os.path.exists(STORAGE_STATE):
             os.remove(STORAGE_STATE)
             print(f"[auth] 已删除旧登录态: {STORAGE_STATE}")
-        await perform_login(headless=headless)
+        await perform_login(headless=headless, timeout_ms=timeout_ms)
         browser = await p.chromium.launch(headless=headless)
     else:
         print("[auth] 登录态有效")
