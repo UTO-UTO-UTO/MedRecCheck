@@ -382,7 +382,7 @@ def check_doctor_advice(record: dict, field: str) -> Tuple[bool, str]:
     if vague_followup and not has_specific_time:
         return False, "未记录复诊时间，需人工复核"
 
-    keywords = ["医嘱", "告知", "注意", "禁忌", "禁食", "禁水", "避免", "保持", "随诊", "不适随诊", "签字"]
+    keywords = ["告知", "注意", "禁忌", "禁食", "禁水", "避免", "保持", "随诊", "复诊", "复查", "观察", "监测", "警告", "嘱咐", "建议", "提醒"]
     matched = [k for k in keywords if k in text]
     if matched:
         return True, f"包含注意事项/医嘱描述: {', '.join(matched)}"
