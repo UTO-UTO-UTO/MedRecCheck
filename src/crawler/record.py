@@ -256,6 +256,15 @@ async def extract_record_text(page: Page) -> dict:
     return result
 
 
+async def restore_dashboard(page: Page) -> None:
+    """重新加载工作台并恢复抓取所需的筛选与分页状态。"""
+    from src.crawler.dashboard import navigate_to_dashboard, apply_filters, set_page_size
+
+    await navigate_to_dashboard(page)
+    await apply_filters(page)
+    await set_page_size(page, size=100)
+
+
 async def fetch_patient_record(
     page: Page,
     patient: dict,
@@ -279,12 +288,23 @@ async def fetch_patient_record(
     idx = patient.get("index", 0)
     print(f"[record] [{idx+1}] 正在抓取患者: {name}")
 
-    # 定位患者并点击
-    patient_locator = page.locator("a.patient-name.auto-close-popup").nth(idx)
+    # 优先按稳定的患者 ID 定位；索引只作为旧页面结构的最后回退。
+    patient_id = patient.get("id")
+    if patient_id and str(patient_id).isdigit():
+        patient_locator = page.locator(
+            f'a.patient-name.auto-close-popup[ng-click="goToPatient({patient_id})"]'
+        ).first
+    else:
+        patient_locator = page.locator(
+            f"a.patient-name.auto-close-popup:has-text('{name}')"
+        ).first
+
     if await patient_locator.count() == 0:
         patient_locator = page.locator(f"a.patient-name.auto-close-popup:has-text('{name}')").first
         if await patient_locator.count() == 0:
-            patient_locator = page.locator(f"text='{name}'").first
+            patient_locator = page.locator("a.patient-name.auto-close-popup").nth(idx)
+            if await patient_locator.count() == 0:
+                patient_locator = page.get_by_text(name, exact=True).first
 
     await patient_locator.click()
 
@@ -310,14 +330,10 @@ async def fetch_patient_record(
     record_data = await extract_record_text(page)
     raw_text = (record_data.get("raw_text") or "").strip()
 
-    async def _go_back():
-        await page.go_back(wait_until="domcontentloaded")
-        await page.wait_for_timeout(1500)
-
     # 病历内容为空 → 视为无病历
     if not raw_text:
         print(f"[record] [{idx+1}] {name} jumped={jumped} visit_date=- → skipped: 未提取到病历内容")
-        await _go_back()
+        await restore_dashboard(page)
         return {
             "patient_name": name,
             "patient_id": patient.get("id"),
@@ -332,7 +348,7 @@ async def fetch_patient_record(
     # 未识别到日期 → 跳过 (避免历史病历被误判为当日)
     if not date_str:
         print(f"[record] [{idx+1}] {name} jumped={jumped} visit_date=- → skipped: 未识别到病历日期")
-        await _go_back()
+        await restore_dashboard(page)
         return {
             "patient_name": name,
             "patient_id": patient.get("id"),
@@ -345,7 +361,7 @@ async def fetch_patient_record(
     if not is_today(date_str):
         reason = f"病历日期非今日: {date_str}"
         print(f"[record] [{idx+1}] {name} jumped={jumped} visit_date={date_str} → skipped: {reason}")
-        await _go_back()
+        await restore_dashboard(page)
         return {
             "patient_name": name,
             "patient_id": patient.get("id"),
@@ -356,7 +372,7 @@ async def fetch_patient_record(
 
     # 当日病历 → 正常评分
     print(f"[record] [{idx+1}] {name} jumped={jumped} visit_date={date_str} → evaluate")
-    await _go_back()
+    await restore_dashboard(page)
     return {
         "patient_name": name,
         "patient_id": patient.get("id"),
@@ -391,6 +407,10 @@ async def crawl_all_records(page: Page, patients: list[dict]) -> list[dict]:
                 "record": {},
                 "error": str(e),
             })
+            try:
+                await restore_dashboard(page)
+            except Exception as restore_error:
+                print(f"[record] 恢复工作台失败: {restore_error}")
         # 适当延迟，避免请求过快
         await page.wait_for_timeout(800)
 

@@ -1,8 +1,14 @@
 import unittest
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.crawler.record import _extract_section, find_date_in_text, is_today
+from src.crawler.record import (
+    _extract_section,
+    crawl_all_records,
+    find_date_in_text,
+    is_today,
+    restore_dashboard,
+)
 
 
 class RecordUtilsTest(unittest.TestCase):
@@ -28,6 +34,36 @@ class RecordUtilsTest(unittest.TestCase):
             _extract_section(raw, ["主诉"], ["口腔检查", "诊断", "处置"]),
             "主诉 左下后牙疼痛3天",
         )
+
+
+class RecordNavigationTest(unittest.IsolatedAsyncioTestCase):
+    async def test_restore_dashboard_reapplies_filters_and_page_size(self):
+        page = object()
+        with (
+            patch("src.crawler.dashboard.navigate_to_dashboard", new=AsyncMock()) as navigate,
+            patch("src.crawler.dashboard.apply_filters", new=AsyncMock()) as filters,
+            patch("src.crawler.dashboard.set_page_size", new=AsyncMock()) as page_size,
+        ):
+            await restore_dashboard(page)
+
+        navigate.assert_awaited_once_with(page)
+        filters.assert_awaited_once_with(page)
+        page_size.assert_awaited_once_with(page, size=100)
+
+    async def test_crawl_recovers_dashboard_after_patient_error(self):
+        page = MagicMock()
+        page.wait_for_timeout = AsyncMock()
+        failure = RuntimeError("患者链接已不在当前分页")
+
+        with (
+            patch("src.crawler.record.fetch_patient_record", new=AsyncMock(side_effect=failure)),
+            patch("src.crawler.record.restore_dashboard", new=AsyncMock()) as restore,
+        ):
+            records = await crawl_all_records(page, [{"name": "张三", "id": "1", "index": 8}])
+
+        restore.assert_awaited_once_with(page)
+        self.assertEqual(records[0]["patient_name"], "张三")
+        self.assertIn("当前分页", records[0]["error"])
 
 
 if __name__ == "__main__":
