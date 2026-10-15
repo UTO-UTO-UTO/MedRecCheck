@@ -34,7 +34,8 @@ jobs:
         id: cache-state
         with:
           path: .tmp/state.json
-          key: medrec-auth-state-v1
+          # Actions 缓存不可覆盖；账号密码变更后必须升级键，避免持续恢复旧登录态。
+          key: medrec-auth-state-v2
 
       - name: 登录 & 抓取病历
         id: crawl
@@ -62,31 +63,40 @@ jobs:
         continue-on-error: true
 
       - name: 检查抓取结果
+        id: data-check
         run: |
           if [ "${{ steps.crawl.outcome }}" != "success" ]; then
             echo "[deploy] 远程抓取失败（可能需验证码），检查是否有历史数据可继续..."
-            if [ -f .tmp/records.json ] && [ -s .tmp/records.json ]; then
+            if python -c "import json, pathlib, sys; p=pathlib.Path('.tmp/records.json'); data=json.loads(p.read_text()) if p.exists() else []; sys.exit(0 if isinstance(data, list) and data else 1)"; then
               echo "[deploy] 存在历史病历数据，继续评分"
+              echo "can_continue=true" >> "$GITHUB_OUTPUT"
             else
               echo "[deploy] 无可用病历数据，终止流程"
-              exit 0
+              echo "can_continue=false" >> "$GITHUB_OUTPUT"
+              echo "::error::病历抓取失败且无可用数据，已停止评分和部署"
+              exit 1
             fi
           else
             echo "[deploy] 抓取成功，继续评分"
+            echo "can_continue=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 评分
+        if: steps.data-check.outputs.can_continue == 'true'
         run: python scripts/score_records.py
 
       - name: 生成报告
+        if: steps.data-check.outputs.can_continue == 'true'
         run: python scripts/generate_report.py
 
       - name: 准备部署文件
+        if: steps.data-check.outputs.can_continue == 'true'
         run: |
           mkdir -p gh-pages-staging
           cp .tmp/report.html gh-pages-staging/index.html
 
       - name: 部署到 GitHub Pages
+        if: steps.data-check.outputs.can_continue == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
