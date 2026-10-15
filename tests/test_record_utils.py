@@ -37,7 +37,7 @@ class RecordUtilsTest(unittest.TestCase):
 
 
 class RecordNavigationTest(unittest.IsolatedAsyncioTestCase):
-    async def test_restore_dashboard_reapplies_filters_and_page_size(self):
+    async def test_restore_dashboard_reapplies_page_size_without_slow_filters(self):
         page = object()
         with (
             patch("src.crawler.dashboard.navigate_to_dashboard", new=AsyncMock()) as navigate,
@@ -47,7 +47,7 @@ class RecordNavigationTest(unittest.IsolatedAsyncioTestCase):
             await restore_dashboard(page)
 
         navigate.assert_awaited_once_with(page)
-        filters.assert_awaited_once_with(page)
+        filters.assert_not_awaited()
         page_size.assert_awaited_once_with(page, size=100)
 
     async def test_crawl_recovers_dashboard_after_patient_error(self):

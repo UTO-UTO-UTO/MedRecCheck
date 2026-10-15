@@ -257,11 +257,10 @@ async def extract_record_text(page: Page) -> dict:
 
 
 async def restore_dashboard(page: Page) -> None:
-    """重新加载工作台并恢复抓取所需的筛选与分页状态。"""
-    from src.crawler.dashboard import navigate_to_dashboard, apply_filters, set_page_size
+    """重新加载工作台并恢复抓取所需的分页状态。"""
+    from src.crawler.dashboard import navigate_to_dashboard, set_page_size
 
     await navigate_to_dashboard(page)
-    await apply_filters(page)
     await set_page_size(page, size=100)
 
 
