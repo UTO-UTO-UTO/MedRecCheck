@@ -29,7 +29,13 @@ async def apply_filters(page: Page) -> None:
 
     for selector, text in checkboxes:
         try:
-            await page.locator(selector).check()
+            locator = page.locator(selector)
+            # 不让已改版或尚未渲染的筛选项继承页面级长超时；恢复工作台时
+            # 该函数会反复调用，单个失效选择器不应拖住整批患者。
+            if await locator.count() == 0:
+                print(f"[dashboard] 警告：未找到筛选项「{text}」，跳过")
+                continue
+            await locator.check(timeout=5000)
             print(f"[dashboard] 已勾选「{text}」")
         except Exception:
             print(f"[dashboard] 警告：未找到筛选项「{text}」，跳过")

@@ -8,6 +8,7 @@
 #   - 首次运行若未保存登录态，会自动调用登录流程并弹出浏览器窗口
 #   - 设置环境变量 MEDREC_HEADLESS=true 可启用无头模式（用于 CI/CD 环境）
 #   - 设置环境变量 MEDREC_TIMEOUT 可调整页面导航超时毫秒数（默认 60000）
+#   - 任一患者抓取异常时仍保存结果供排查，但脚本返回 1，禁止发布部分失败的报告
 
 import asyncio
 import json
@@ -74,9 +75,13 @@ async def main() -> int:
                 json.dump(records, f, ensure_ascii=False, indent=2)
 
             success_count = sum(1 for r in records if not r.get("error"))
+            error_count = len(records) - success_count
             print(f"[crawl] 完成：共 {len(records)} 位患者，成功 {success_count} 位")
             print(f"[crawl] 结果已保存至: {RECORDS_FILE}")
             await browser.close()
+            if error_count:
+                print(f"[crawl] 错误：{error_count} 位患者抓取失败，本次结果禁止进入评分和部署")
+                return 1
             return 0
 
         except Exception as e:

@@ -257,10 +257,21 @@ async def extract_record_text(page: Page) -> dict:
 
 
 async def restore_dashboard(page: Page) -> None:
-    """重新加载工作台并恢复抓取所需的分页状态。"""
-    from src.crawler.dashboard import navigate_to_dashboard, set_page_size
+    """重新加载工作台并恢复抓取所需的筛选、分页状态。"""
+    from src.crawler.dashboard import apply_filters, navigate_to_dashboard, set_page_size
 
-    await navigate_to_dashboard(page)
+    # 病历页由工作台跳入时优先走浏览器历史返回，可保留 Angular 工作台实例；
+    # 直接重新打开根地址会丢失筛选后的列表，导致后续患者链接全部消失。
+    if "record" in page.url.lower():
+        try:
+            await page.go_back(wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(3000)
+            print("[dashboard] 已通过浏览器历史返回工作台")
+        except Exception:
+            await navigate_to_dashboard(page)
+    else:
+        await navigate_to_dashboard(page)
+    await apply_filters(page)
     await set_page_size(page, size=100)
 
 
@@ -305,7 +316,7 @@ async def fetch_patient_record(
             if await patient_locator.count() == 0:
                 patient_locator = page.get_by_text(name, exact=True).first
 
-    await patient_locator.click()
+    await patient_locator.click(timeout=10000)
 
     # 等待病历页面加载（SPA 跳转，当前页变化）
     await page.wait_for_timeout(1500)
