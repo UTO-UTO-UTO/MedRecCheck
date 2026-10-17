@@ -34,8 +34,11 @@ jobs:
         id: cache-state
         with:
           path: .tmp/state.json
-          # Actions 缓存不可覆盖；账号密码变更后必须升级键，避免持续恢复旧登录态。
-          key: medrec-auth-state-v2
+          # 每次运行使用唯一键并恢复最近一次缓存；Actions 缓存不可覆盖，
+          # 固定键会永久恢复最早保存、随后已经过期的登录态。
+          key: medrec-auth-state-${{ github.run_id }}
+          restore-keys: |
+            medrec-auth-state-
 
       - name: 登录 & 抓取病历
         id: crawl

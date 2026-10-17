@@ -41,6 +41,8 @@ class RecordNavigationTest(unittest.IsolatedAsyncioTestCase):
     async def test_apply_filters_skips_missing_selectors_without_waiting(self):
         page = MagicMock()
         missing = MagicMock()
+        missing.first = missing
+        missing.wait_for = AsyncMock(side_effect=TimeoutError("筛选区未出现"))
         missing.count = AsyncMock(return_value=0)
         missing.check = AsyncMock()
         page.locator.return_value = missing
@@ -50,6 +52,7 @@ class RecordNavigationTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(missing.count.await_count, 2)
         missing.check.assert_not_awaited()
+        missing.wait_for.assert_awaited_once_with(state="attached", timeout=15000)
         page.wait_for_timeout.assert_awaited_once_with(1500)
 
     async def test_restore_dashboard_reapplies_filters_before_page_size(self):

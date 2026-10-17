@@ -13,8 +13,18 @@ async def navigate_to_dashboard(page: Page) -> None:
     url = f"{BASE_URL}{DASHBOARD_PATH}"
     print(f"[dashboard] 进入工作台: {url}")
     await page.goto(url, wait_until="domcontentloaded")
-    # Angular SPA 渲染较慢，额外等待确保动态内容加载
-    await page.wait_for_timeout(3000)
+    # 自动重新登录后的 Angular 首次渲染可能明显慢于普通刷新。等待明确的
+    # 工作台控件，而不是只依赖固定延迟后就误判页面结构不存在。
+    controls = page.locator(
+        "input[ng-model='criteria.includeLeft'], "
+        "input[ng-model='criteria.includeCharged'], "
+        "a.patient-name.auto-close-popup"
+    ).first
+    try:
+        await controls.wait_for(state="attached", timeout=15000)
+    except Exception:
+        print("[dashboard] 警告：等待工作台控件超时")
+    await page.wait_for_timeout(500)
 
 
 async def apply_filters(page: Page) -> None:
@@ -26,6 +36,16 @@ async def apply_filters(page: Page) -> None:
         ("input[ng-model='criteria.includeLeft']", "包含已离开"),
         ("input[ng-model='criteria.includeCharged']", "包含已结账"),
     ]
+
+    # 两个筛选项属于同一工作台区域，只等待一次；超时后下面的 count()
+    # 会立即判断缺失，不会让每个选择器重复继承页面级长超时。
+    try:
+        await page.locator(
+            "input[ng-model='criteria.includeLeft'], "
+            "input[ng-model='criteria.includeCharged']"
+        ).first.wait_for(state="attached", timeout=15000)
+    except Exception:
+        print("[dashboard] 警告：筛选区域未在 15 秒内出现")
 
     for selector, text in checkboxes:
         try:
@@ -178,7 +198,12 @@ async def get_patient_list(page: Page) -> list[dict]:
     patients = []
 
     # 优先使用已知的精确选择器 a.patient-name.auto-close-popup
-    patient_anchors = await page.locator("a.patient-name.auto-close-popup").all()
+    precise_locator = page.locator("a.patient-name.auto-close-popup")
+    try:
+        await precise_locator.first.wait_for(state="attached", timeout=10000)
+    except Exception:
+        pass
+    patient_anchors = await precise_locator.all()
     if patient_anchors:
         print(f"[dashboard] 找到 {len(patient_anchors)} 个患者")
         import re
@@ -219,13 +244,10 @@ async def get_patient_list(page: Page) -> list[dict]:
             break
 
     if items is None or await items.count() == 0:
-        # 最后尝试直接根据患者姓名字段反查
-        name_locators = await page.locator(".patient-name, .name, td:nth-child(2) a, .user-name").all()
-        names = [await n.text_content() for n in name_locators]
-        names = [n.strip() for n in names if n and n.strip()]
-        print(f"[dashboard] 通过姓名字段找到 {len(names)} 个患者")
-        patients = [{"name": n, "id": None, "index": i} for i, n in enumerate(names)]
-        return patients
+        # 不使用 .name / .user-name 等宽泛选择器：登录页的认证状态和数字也会
+        # 命中，曾被误当成患者并生成错误报告。
+        print("[dashboard] 未找到明确的患者列表元素")
+        return []
 
     count = await items.count()
     for i in range(count):
